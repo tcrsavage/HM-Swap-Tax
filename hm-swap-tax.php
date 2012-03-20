@@ -15,7 +15,15 @@ add_action( 'admin_menu', function() {
 		?>
 				
 		<div class="wrap">
-		
+			
+			<?php if ( ! empty( $_GET['status'] ) ) : ?>
+				<?php if ( $_GET['status'] == 'done' ) : ?>
+					<div class="updated message">
+						<p>Completed</p>
+					</div>
+				<?php endif; ?>
+			<?php endif; ?>
+
 			<div id="icon-tools" class="icon32"><br></div>
 			<h2>Change Taxonomies</h2>
 			
@@ -25,17 +33,17 @@ add_action( 'admin_menu', function() {
 					
 				<form class="hmct-form" method="post">
 				
-					<div class="hmct-from hmct-tax-container">
+					<div class="hmct-from hmct-tax-container" styke="overflow:hidden">
 							
 							<h2>From</h2><br />
 					    	
-					    	<select name="hmct-from-taxonomies" class="hmct-tax-selector" data-direction="from" >	
+					    	<select data-multiple-terms="1" name="hmct-from-taxonomies" class="hmct-tax-selector" data-direction="from" style="float:left">	
 					    			
 					    		<option value=""> - Taxonomy - </option>	
 					    			
 					    		<?php foreach ( $taxonomies as $key => $tax ): ?>
 					    	
-					    			<option value="<?php echo $key; ?>"><?php echo $tax->labels->name; ?></option>
+					    			<option <?php selected( ! empty( $_GET['taxonomy_from'] ) && $_GET['taxonomy_from'] == $key ) ?> value="<?php echo $key; ?>"><?php echo $tax->labels->name; ?></option>
 					    
 					    		<?php endforeach; ?>
 					    		
@@ -53,7 +61,7 @@ add_action( 'admin_menu', function() {
 					    			
 					    		<?php foreach ( $taxonomies as $key => $tax ): ?>
 					    
-					    			<option value="<?php echo $key; ?>"><?php echo $tax->labels->name; ?></option>
+					    			<option <?php selected( ! empty( $_GET['taxonomy_to'] ) && $_GET['taxonomy_to'] == $key ) ?> value="<?php echo $key; ?>"><?php echo $tax->labels->name; ?></option>
 					
 					    		<?php endforeach; ?>
 					    		
@@ -98,7 +106,7 @@ function hmct_swap_them( $args = array() ) {
 		
 		'from_tax' 		=> null,
 		'to_tax' 		=> null,
-		'from_term' 	=> null,
+		'from_term' 	=> array(),
 		'to_term'		=> null,
 		'append'		=> false,
 		'delete_origin' => false
@@ -107,6 +115,7 @@ function hmct_swap_them( $args = array() ) {
 	
 	$args = wp_parse_args( $args, $defaults );
 	
+	$args['from_term'] = (array) $args['from_term'];
 		
 	if ( ! $args['from_tax'] || ! $args['to_tax'] || ! $args['from_term'] || ! $args['to_term'] )
 		return false;
@@ -114,7 +123,6 @@ function hmct_swap_them( $args = array() ) {
 	$posts = get_posts( array( 
 	
 		'post_type' => 'any',
-		
 		'tax_query' => array(
 			array(
 				'taxonomy' => $args['from_tax'],
@@ -124,13 +132,10 @@ function hmct_swap_them( $args = array() ) {
 		),
 		
 		'posts_per_page' => 0,
-		
 		'nopaging' => true,
-		
 		'post_status' => 'all'
-	
 	) );
-	
+
 	foreach ( $posts as $key => $post ) { 
 		
 		$term_ids = array();
@@ -139,18 +144,17 @@ function hmct_swap_them( $args = array() ) {
 			
 			$terms = wp_get_object_terms( $post->ID, $args['from_tax'] );
 		
-			foreach ( $terms as $term ){
+			foreach ( $terms as $term ) {
 		
-				 if ( $term->term_id == $args['from_term'] )
+				 if ( in_array( $term->term_id, $args['from_term'] ) )
 				 	continue;
 			 		
 				 $term_ids[] = (int) $term->term_id;
 			}
 			
 			wp_set_object_terms( $post->ID, $term_ids, $args['from_tax'], false );
-
 		}	
-					
+		
 		wp_set_object_terms( $post->ID, $args['to_term'], $args['to_tax'], (bool) $args['append'] );
 		
 	}
@@ -172,33 +176,39 @@ add_action( 'load-tools_page_change_tax', function() {
 		$delete_origin = ( $_POST['hmct-delete-origin'] == "1"  ) ? true : false;
 	else
 		$delete_origin = false;		
-	
+
 	hmct_swap_them( array(  
 		
 		'from_tax' 		=> $_POST['hmct-from-taxonomies'],
-		'to_tax' 		=> $_POST['hmct-to-taxonomies'] ,
-		'from_term' 	=> (int) $_POST['hmct-from-terms'],
+		'to_tax' 		=> $_POST['hmct-to-taxonomies'],
+		'from_term' 	=> $_POST['hmct-from-terms'],
 		'to_term'		=> (int) $_POST['hmct-to-terms'],
 		'append'		=> $append,
 		'delete_origin' => $delete_origin
 	
 	) );
 	
-		
+	wp_redirect( add_query_arg( array( 
+		'status' => 'done',
+		'taxonomy_from' => $_POST['hmct-from-taxonomies'],
+		'taxonomy_to' => $_POST['hmct-to-taxonomies']
+		) ), 303 );
+	exit;
 
 } );
 
 //Ajax - Grab terms on taxonomy option change then insert them into the DOM
-add_action( 'wp_ajax_yell_change_tax', function() {
+add_action( 'wp_ajax_hm_change_tax', function() {
 	
 	$tax = (string) $_POST['tax_slug'];
+	$multiple = (bool) $_POST['multiple'];
 	
 	$terms = get_terms( $tax );
 	
 	if ( is_wp_error( $terms ) || ! $terms )
 		exit; ?>
 	
-	<select name="hmct-<?php echo (string) $_POST['direction']; ?>-terms" class="hmct-term-selector">
+	<select <?php echo $multiple ? 'multiple' : '' ?> name="hmct-<?php echo (string) $_POST['direction']; ?>-terms<?php echo $multiple ? '[]' : '' ?>" class="hmct-term-selector">
 		
 		<option value=""> - Term - </option>
 		
@@ -243,7 +253,7 @@ add_action( 'load-tools_page_change_tax', function () {
 						
 						if ( jQuery( this ).val().length ) {
 						
-							jQuery.post( ajaxurl, { action: 'yell_change_tax', tax_slug: jQuery( this ).val(), direction: direction }, function( data ) { 
+							jQuery.post( ajaxurl, { action: 'hm_change_tax', tax_slug: jQuery( this ).val(), direction: direction, multiple: jQuery( this ).attr( 'data-multiple-terms' ) }, function( data ) { 
 								
 								if ( data.length ) 
 									selector.closest( '.hmct-tax-container' ).append( data );
@@ -253,6 +263,9 @@ add_action( 'load-tools_page_change_tax', function () {
 							} );					
 						}
 				} );
+
+				//fire on load
+				jQuery( '.hmct .hmct-tax-selector' ).change();
 				
 			} );
 
