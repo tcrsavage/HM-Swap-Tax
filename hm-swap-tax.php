@@ -203,7 +203,7 @@ add_action( 'wp_ajax_hm_change_tax', function() {
 	$tax = (string) $_POST['tax_slug'];
 	$multiple = (bool) $_POST['multiple'];
 	
-	$terms = get_terms( $tax );
+	$terms = get_terms( $tax, 'hide_empty=1' );
 	
 	if ( is_wp_error( $terms ) || ! $terms )
 		exit; ?>
